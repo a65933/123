@@ -41,6 +41,10 @@ var deathCount = 0;
 var skillLoopRunning = false;
 var skillLoopWorkerId = 0;
 
+// 手动控制保护
+var manualControlUntil = 0;
+var MANUAL_CONTROL_HOLD_MS = 3000;
+
 // OCR触发控制
 var screenCaptureReady = false;
 
@@ -114,40 +118,47 @@ function bindMainWindowEvents() {
     if (!win) return;
 
     win.mini.click(function () {
+        holdManualControl(3000);
         if (!canClickNow()) return;
         toggleMinimize();
     });
 
     win.ocrToggle.click(function () {
+        holdManualControl(3000);
         if (!canClickNow()) return;
         if (monitoring) stopMonitoring();
         else startMonitoring();
     });
 
     win.skillToggle.click(function () {
+        holdManualControl(3000);
         if (!canClickNow()) return;
         toggleSkillLoop();
     });
 
     win.testMenu.click(function () {
+        holdManualControl(3000);
         if (!canClickNow()) return;
         showTestMenu();
     });
 
     win.configMenu.click(function () {
+        holdManualControl(3000);
         if (!canClickNow()) return;
         showConfigMenu();
     });
 
     win.exitBtn.click(function () {
+        holdManualControl(3000);
         if (!canClickNow()) return;
         exitScript();
     });
 
     var downX = 0, downY = 0, winX = 0, winY = 0;
-    win.title.setOnTouchListener(function(view, event) {
+    win.titleBar.setOnTouchListener(function(view, event) {
         switch (event.getAction()) {
             case event.ACTION_DOWN:
+                holdManualControl(3000);
                 downX = event.getRawX();
                 downY = event.getRawY();
                 winX = win.getX();
@@ -178,6 +189,7 @@ function bindMiniWindowEvents() {
     miniWin.restore.setOnTouchListener(function(view, event) {
         switch (event.getAction()) {
             case event.ACTION_DOWN:
+                holdManualControl(3000);
                 downX = event.getRawX();
                 downY = event.getRawY();
                 winX = miniWin.getX();
@@ -256,6 +268,25 @@ function canClickNow() {
 
 function autoSave() {
     saveConfig();
+}
+
+function holdManualControl(ms) {
+    var keepMs = parseInt(ms);
+    if (isNaN(keepMs) || keepMs <= 0) keepMs = MANUAL_CONTROL_HOLD_MS;
+    manualControlUntil = new Date().getTime() + keepMs;
+}
+
+function isManualControlActive() {
+    return new Date().getTime() < manualControlUntil;
+}
+
+function waitIfManualControl(myWorkerId) {
+    while (isManualControlActive()) {
+        if (!skillLoopRunning) return false;
+        if (typeof myWorkerId === "number" && myWorkerId !== skillLoopWorkerId) return false;
+        sleep(50);
+    }
+    return true;
 }
 
 function safeParseInt(v, dft) {
@@ -2031,6 +2062,7 @@ function sleepSkillDelay(totalMs, myWorkerId) {
     while (remain > 0) {
         if (!skillLoopRunning) return false;
         if (myWorkerId !== skillLoopWorkerId) return false;
+        if (!waitIfManualControl(myWorkerId)) return false;
         var slice = remain > 50 ? 50 : remain;
         sleep(slice);
         remain -= slice;
@@ -2081,6 +2113,7 @@ function startSkillLoop(notify) {
                 for (var i = 0; i < list.length; i++) {
                     if (!skillLoopRunning) break;
                     if (myWorkerId !== skillLoopWorkerId) break;
+                    if (!waitIfManualControl(myWorkerId)) break;
 
                     var skill = list[i];
                     var tapCount = parseInt(skill.tapCount || 1);
@@ -2090,6 +2123,7 @@ function startSkillLoop(notify) {
                     skillExecRemainMs = skill.delay;
                     updateInfo();
 
+                    if (!waitIfManualControl(myWorkerId)) break;
                     doTapRepeat(skill.x, skill.y, tapCount, 60);
 
                     if (!sleepSkillDelay(skill.delay, myWorkerId)) {
