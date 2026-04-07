@@ -14,10 +14,8 @@ var deathClickEnabled = true;
 var deathClickPoint = null;
 var deathClickWaitMs = 1000;
 var pickupText = "拾取";
-var pickupRegion = null;
 var pickupClickEnabled = false;
 var pickupClickPoint = null;
-var pickupReuseWatchRegion = true;
 
 // 多步骤场景
 var stepScenes = [];
@@ -590,7 +588,7 @@ function showTestMenu() {
     dialogs.select(
         "测试菜单",
         [
-            "测试死亡识别",
+            "测试死亡检测",
             "测试当前场景步骤",
             "测试拾取识别"
         ]
@@ -636,15 +634,26 @@ function showConfigMenu() {
 
 function configureDeathDetectionDialog() {
     dialogs.select(
-        "死亡识别设置",
+        "死亡检测设置",
         [
-            "设置死亡识别文字+区域",
+            "设置死亡关键词",
             "设置死亡后点击位置",
             "设置死亡后等待时间"
         ]
     ).then(function(op) {
         if (op == 0) {
-            setWatchTextDialog();
+            dialogs.rawInput("请输入死亡关键词", watchText || "基本").then(function(text) {
+                if (text == null) return;
+                var newText = String(text).trim();
+                if (!newText) {
+                    toast("监控词不能为空");
+                    return;
+                }
+                watchText = newText;
+                autoSave();
+                updateInfo(true);
+                toast("已设置死亡关键词");
+            });
         } else if (op == 1) {
             var pos = deathClickPoint || getDefaultMarkerPos();
             showMarkerAdjuster(pos.x, pos.y, "拖动死亡后点击位置", function(finalX, finalY) {
@@ -665,81 +674,85 @@ function configureDeathDetectionDialog() {
     });
 }
 
-function configurePickupDetectionDialog() {
-    function continuePickupRegionSetup() {
-        pickupClickEnabled = true;
-        if (!pickupClickPoint) {
-            pickupClickPoint = getDefaultMarkerPos();
-        }
-        autoSave();
-        updateInfo(true);
+function hideFloatyForOcrSetup() {
+    try { if (win) win.setPosition(-3000, -3000); } catch (e1) {}
+    try { if (win) win.setSize(0, 0); } catch (e2) {}
+    try { if (miniWin) miniWin.setPosition(-3000, -3000); } catch (e3) {}
+    try { if (miniWin) miniWin.setSize(0, 0); } catch (e4) {}
+}
 
-        dialogs.select(
-            "拾取识别设置",
-            [
-                pickupReuseWatchRegion ? "改为单独设置拾取区域" : "改为复用死亡区域",
-                "设置拾取点击位置",
-                "设置拾取识别文字"
-            ]
-        ).then(function(op) {
-            if (op == 0) {
-                pickupReuseWatchRegion = !pickupReuseWatchRegion;
-                autoSave();
-                updateInfo(true);
-                if (!pickupReuseWatchRegion && !pickupRegion) {
-                    toast("请继续设置拾取识别区域");
-                    pickPickupRegionDialog();
-                } else {
-                    toast(pickupReuseWatchRegion ? "已改为复用死亡区域" : "已改为单独拾取区域");
-                }
-            } else if (op == 1) {
-                var pos = pickupClickPoint || getDefaultMarkerPos();
-                showMarkerAdjuster(pos.x, pos.y, "拖动拾取点击位置", function(finalX, finalY) {
-                    pickupClickPoint = { x: finalX, y: finalY };
-                    autoSave();
-                    updateInfo(true);
-                    toast("已设置拾取点击位置");
-                });
-            } else if (op == 2) {
-                dialogs.rawInput("拾取识别文字", pickupText || "拾取").then(function(v) {
-                    if (v == null) return;
-                    pickupText = String(v).trim() || "拾取";
-                    autoSave();
-                    updateInfo(true);
-                    toast("已设置拾取识别文字");
-                });
+function restoreFloatyAfterOcrSetup() {
+    try {
+        if (minimized) {
+            if (miniWin) {
+                miniWin.setPosition(miniWinPos.x, miniWinPos.y);
+                miniWin.setSize(-2, -2);
             }
-        });
+            if (win) {
+                win.setPosition(-3000, -3000);
+                win.setSize(0, 0);
+            }
+        } else {
+            if (win) {
+                win.setPosition(mainWinPos.x, mainWinPos.y);
+                win.setSize(-2, -2);
+            }
+            if (miniWin) {
+                miniWin.setPosition(-3000, -3000);
+                miniWin.setSize(0, 0);
+            }
+        }
+        updateInfo(true);
+    } catch (e) {
+        log("restoreFloatyAfterOcrSetup error: " + e);
     }
+}
 
-    function pickPickupRegionDialog() {
-        toast("先点击拾取识别区域左上角");
-        pickOnePoint(function(x1, y1) {
-            toast("再点击拾取识别区域右下角");
-            pickOnePoint(function(x2, y2) {
-                var left = Math.min(x1, x2);
-                var top = Math.min(y1, y2);
-                var width = Math.abs(x2 - x1);
-                var height = Math.abs(y2 - y1);
-                if (width < 5 || height < 5) {
-                    toast("拾取识别区域太小，设置失败");
-                    return;
-                }
-                pickupRegion = { x: left, y: top, w: width, h: height };
-                autoSave();
-                updateInfo(true);
-                toast("已设置拾取识别区域");
-            }, "请点击拾取识别区域右下角");
-        }, "请点击拾取识别区域左上角");
+function setOcrRegionOnlyDialog(onDone) {
+    if (dialogBusy) {
+        toast("当前已有操作未完成");
+        return;
     }
+    dialogBusy = true;
+    hideFloatyForOcrSetup();
+    sleep(300);
+    toast("先点击OCR区域左上角");
+    pickOnePoint(function(x1, y1) {
+        toast("再点击OCR区域右下角");
+        pickOnePoint(function(x2, y2) {
+            dialogBusy = false;
+            var left = Math.min(x1, x2);
+            var top = Math.min(y1, y2);
+            var width = Math.abs(x2 - x1);
+            var height = Math.abs(y2 - y1);
 
+            if (width < 5 || height < 5) {
+                restoreFloatyAfterOcrSetup();
+                toast("OCR区域太小，设置失败");
+                return;
+            }
+
+            watchRegion = {
+                x: left,
+                y: top,
+                w: width,
+                h: height
+            };
+
+            autoSave();
+            restoreFloatyAfterOcrSetup();
+            toast("已设置OCR区域");
+            if (onDone) onDone();
+        }, "请点击OCR区域右下角");
+    }, "请点击OCR区域左上角");
+}
+
+function configurePickupDetectionDialog() {
     dialogs.select(
         "拾取识别设置",
         [
             "设置拾取识别文字",
-            pickupReuseWatchRegion ? "当前：复用死亡区域" : "当前：单独拾取区域",
             "设置拾取点击位置",
-            "测试拾取识别点击",
             "同图对比死亡/拾取识别"
         ]
     ).then(function(op) {
@@ -753,15 +766,6 @@ function configurePickupDetectionDialog() {
                 toast("已设置拾取识别文字");
             });
         } else if (op == 1) {
-            if (!watchRegion) {
-                dialogs.confirm("拾取识别设置", "当前还没有设置死亡识别区域，是否先去设置？").then(function(ok) {
-                    if (!ok) return;
-                    setWatchTextDialog();
-                });
-                return;
-            }
-            continuePickupRegionSetup();
-        } else if (op == 2) {
             var pos = pickupClickPoint || getDefaultMarkerPos();
             showMarkerAdjuster(pos.x, pos.y, "拖动拾取点击位置", function(finalX, finalY) {
                 pickupClickPoint = { x: finalX, y: finalY };
@@ -770,9 +774,7 @@ function configurePickupDetectionDialog() {
                 updateInfo(true);
                 toast("已设置拾取点击位置");
             });
-        } else if (op == 3) {
-            manualTestOcrClick();
-        } else if (op == 4) {
+        } else if (op == 2) {
             manualCompareOcrSameFrame();
         }
     });
@@ -780,14 +782,14 @@ function configurePickupDetectionDialog() {
 
 function manualCompareOcrSameFrame() {
     var deathRegion = watchRegion;
-    var pickupActiveRegion = pickupReuseWatchRegion ? watchRegion : pickupRegion;
+    var pickupActiveRegion = watchRegion;
 
     if (!watchText || !String(watchText).trim()) {
-        toast("请先设置死亡识别文字");
+        toast("请先设置死亡关键词");
         return;
     }
     if (!deathRegion) {
-        toast("请先设置死亡识别区域");
+        toast("请先设置OCR区域");
         return;
     }
     if (!pickupText || !String(pickupText).trim()) {
@@ -855,15 +857,14 @@ function manualCompareOcrSameFrame() {
                 "设备尺寸：" + getDeviceSizeText(),
                 "截图尺寸：" + getImageSizeText(img),
                 "",
-                "死亡目标词：" + watchText,
-                "死亡原区域：" + regionText(deathRegion),
-                "死亡实际区域：" + (deathActualRegion ? regionText(deathActualRegion) : "无效"),
+                "死亡关键词：" + watchText,
+                "OCR原区域：" + regionText(deathRegion),
+                "OCR实际区域：" + (deathActualRegion ? regionText(deathActualRegion) : "无效"),
                 "死亡识别结果：" + (deathFound ? "命中" : "未命中"),
                 "死亡识别到的文字：",
                 deathText,
                 "",
                 "拾取目标词：" + pickupText,
-                "拾取是否复用死亡区域：" + (pickupReuseWatchRegion ? "是" : "否"),
                 "拾取原区域：" + regionText(pickupActiveRegion),
                 "拾取实际区域：" + (pickupActualRegion ? regionText(pickupActualRegion) : "无效"),
                 "拾取识别结果：" + (pickupFound ? "命中" : "未命中"),
@@ -885,7 +886,7 @@ function manualCompareOcrSameFrame() {
 }
 
 function manualTestOcrClick() {
-    var activeRegion = pickupReuseWatchRegion ? watchRegion : pickupRegion;
+    var activeRegion = watchRegion;
     if (!pickupText || !String(pickupText).trim()) {
         toast("请先设置拾取识别文字");
         return;
@@ -929,16 +930,19 @@ function showOcrMenu() {
     dialogs.select(
         "OCR设置",
         [
+            "设置OCR区域",
             "死亡识别设置",
             "拾取识别设置",
             "修改OCR轮询间隔（秒）"
         ]
     ).then(function(op) {
         if (op == 0) {
-            configureDeathDetectionDialog();
+            setOcrRegionOnlyDialog();
         } else if (op == 1) {
-            configurePickupDetectionDialog();
+            configureDeathDetectionDialog();
         } else if (op == 2) {
+            configurePickupDetectionDialog();
+        } else if (op == 3) {
             dialogs.rawInput("OCR轮询间隔（秒）", String(watchIntervalSec || 10)).then(function(v) {
                 if (v == null) return;
                 watchIntervalSec = normalizeDelay(v, 10);
@@ -1589,56 +1593,20 @@ function showStepList() {
 }
 
 function setWatchTextDialog(onDone) {
-    if (dialogBusy) {
-        toast("当前已有操作未完成");
-        return;
-    }
-    dialogBusy = true;
-
     dialogs.rawInput("请输入死亡识别文字", watchText || "基本").then(function(text) {
-        if (text == null) {
-            dialogBusy = false;
-            return;
-        }
+        if (text == null) return;
 
         var newText = String(text).trim();
         if (!newText) {
-            dialogBusy = false;
             toast("监控词不能为空");
             return;
         }
 
         watchText = newText;
-
-        toast("先点击识别范围左上角");
-        pickOnePoint(function(x1, y1) {
-            toast("再点击识别范围右下角");
-            pickOnePoint(function(x2, y2) {
-                dialogBusy = false;
-
-                var left = Math.min(x1, x2);
-                var top = Math.min(y1, y2);
-                var width = Math.abs(x2 - x1);
-                var height = Math.abs(y2 - y1);
-
-                if (width < 5 || height < 5) {
-                    toast("识别范围太小，设置失败");
-                    return;
-                }
-
-                watchRegion = {
-                    x: left,
-                    y: top,
-                    w: width,
-                    h: height
-                };
-
-                autoSave();
-                updateInfo();
-                toast("已设置死亡识别文字和区域");
-                if (onDone) onDone();
-            }, "请点击识别范围右下角");
-        }, "请点击识别范围左上角");
+        autoSave();
+        updateInfo(true);
+        toast("已设置死亡识别文字");
+        if (onDone) onDone();
     });
 }
 
@@ -1716,12 +1684,9 @@ function getDeviceSizeText() {
     }
 }
 
-function checkWatchText(targetText, region) {
-    var img = null;
+function analyzeOcrInImage(img, region, targetText) {
     var detectImg = null;
-
     try {
-        img = captureScreen();
         if (!img) return { found: false, debugText: "", clickPoint: null, actualRegion: null, imageSizeText: "未知" };
 
         detectImg = img;
@@ -1766,12 +1731,25 @@ function checkWatchText(targetText, region) {
 
         return { found: found, debugText: arr.join(" | "), clickPoint: firstHitCenter, actualRegion: actualRegion, imageSizeText: imageSizeText };
     } catch (e) {
-        log("checkWatchText error: " + e);
+        log("analyzeOcrInImage error: " + e);
         return { found: false, debugText: "ERR: " + e, clickPoint: null, actualRegion: null, imageSizeText: "未知" };
     } finally {
         try {
             if (detectImg && detectImg !== img) detectImg.recycle();
         } catch (e) {}
+    }
+}
+
+function checkWatchText(targetText, region) {
+    var img = null;
+    try {
+        img = captureScreen();
+        if (!img) return { found: false, debugText: "", clickPoint: null, actualRegion: null, imageSizeText: "未知" };
+        return analyzeOcrInImage(img, region, targetText);
+    } catch (e) {
+        log("checkWatchText error: " + e);
+        return { found: false, debugText: "ERR: " + e, clickPoint: null, actualRegion: null, imageSizeText: "未知" };
+    } finally {
         try {
             if (img) img.recycle();
         } catch (e) {}
@@ -1780,11 +1758,11 @@ function checkWatchText(targetText, region) {
 
 function manualTestOcr() {
     if (!watchText || !String(watchText).trim()) {
-        toast("请先设置死亡识别文字");
+        toast("请先设置死亡关键词");
         return;
     }
     if (!watchRegion) {
-        toast("请先设置死亡识别文字并框选识别区域");
+        toast("请先设置OCR区域");
         return;
     }
 
@@ -1798,12 +1776,12 @@ function manualTestOcr() {
             var ret = checkWatchText(watchText, watchRegion);
             var recognizedText = (ret && ret.debugText) || "(空)";
             var msg = ret && ret.found
-                ? ("OCR识别成功：命中【" + watchText + "】\n设备尺寸：" + getDeviceSizeText() + "\n截图尺寸：" + ((ret && ret.imageSizeText) || "未知") + "\n原区域：" + regionText(watchRegion) + "\n实际区域：" + ((ret && ret.actualRegion) ? regionText(ret.actualRegion) : "无效") + "\n识别到的文字：\n" + recognizedText)
-                : ("OCR识别失败：未命中【" + watchText + "】\n设备尺寸：" + getDeviceSizeText() + "\n截图尺寸：" + ((ret && ret.imageSizeText) || "未知") + "\n原区域：" + regionText(watchRegion) + "\n实际区域：" + ((ret && ret.actualRegion) ? regionText(ret.actualRegion) : "无效") + "\n识别到的文字：\n" + recognizedText);
+                ? ("OCR检测成功：命中【" + watchText + "】\n设备尺寸：" + getDeviceSizeText() + "\n截图尺寸：" + ((ret && ret.imageSizeText) || "未知") + "\nOCR原区域：" + regionText(watchRegion) + "\nOCR实际区域：" + ((ret && ret.actualRegion) ? regionText(ret.actualRegion) : "无效") + "\n识别到的文字：\n" + recognizedText)
+                : ("OCR检测失败：未命中【" + watchText + "】\n设备尺寸：" + getDeviceSizeText() + "\n截图尺寸：" + ((ret && ret.imageSizeText) || "未知") + "\nOCR原区域：" + regionText(watchRegion) + "\nOCR实际区域：" + ((ret && ret.actualRegion) ? regionText(ret.actualRegion) : "无效") + "\n识别到的文字：\n" + recognizedText);
 
             log("manualTestOcr => " + msg);
-            toast(ret && ret.found ? "死亡识别成功" : "死亡识别失败");
-            dialogs.alert("测试死亡识别", msg);
+            toast(ret && ret.found ? "死亡检测成功" : "死亡检测失败");
+            dialogs.alert("测试死亡检测", msg);
         } catch (e) {
             log("manualTestOcr error: " + e);
             toast("测试死亡识别异常: " + e);
@@ -1947,9 +1925,25 @@ function startMonitoring() {
                 updateInfo();
 
                 var currentScene = getActiveStepScene();
-                var pickupActiveRegion = pickupReuseWatchRegion ? watchRegion : pickupRegion;
-                var deathRet = checkWatchText(watchText, watchRegion);
-                var pickupRet = pickupClickEnabled && pickupText && pickupActiveRegion ? checkWatchText(pickupText, pickupActiveRegion) : { found: false };
+                var pickupActiveRegion = watchRegion;
+                var img = null;
+                var deathRet = { found: false };
+                var pickupRet = { found: false };
+                try {
+                    img = captureScreen();
+                    if (img) {
+                        deathRet = analyzeOcrInImage(img, watchRegion, watchText);
+                        pickupRet = pickupClickEnabled && pickupText && pickupActiveRegion
+                            ? analyzeOcrInImage(img, pickupActiveRegion, pickupText)
+                            : { found: false };
+                    }
+                } catch (ocrErr) {
+                    log("monitor shared ocr error: " + ocrErr);
+                    deathRet = { found: false, debugText: "ERR: " + ocrErr };
+                    pickupRet = { found: false, debugText: "ERR: " + ocrErr };
+                } finally {
+                    try { if (img) img.recycle(); } catch (imgErr) {}
+                }
                 if (!monitoring || myMonitoringWorkerId !== monitoringWorkerId) break;
 
                 if (pickupRet.found && pickupClickEnabled && pickupClickPoint && isValidPoint(pickupClickPoint.x, pickupClickPoint.y)) {
@@ -2444,10 +2438,8 @@ function saveConfig() {
             deathClickPoint: deathClickPoint,
             deathClickWaitMs: deathClickWaitMs,
             pickupText: pickupText,
-            pickupRegion: pickupRegion,
             pickupClickEnabled: pickupClickEnabled,
             pickupClickPoint: pickupClickPoint,
-            pickupReuseWatchRegion: pickupReuseWatchRegion,
             deathCount: deathCount,
             mainWinPos: mainWinPos,
             miniWinPos: miniWinPos,
@@ -2480,10 +2472,8 @@ function loadConfig() {
             deathClickPoint = data.deathClickPoint || null;
             deathClickWaitMs = typeof data.deathClickWaitMs === "number" ? data.deathClickWaitMs : 1000;
             pickupText = data.pickupText || "拾取";
-            pickupRegion = data.pickupRegion || null;
             pickupClickEnabled = !!data.pickupClickEnabled;
             pickupClickPoint = data.pickupClickPoint || null;
-            pickupReuseWatchRegion = typeof data.pickupReuseWatchRegion === "boolean" ? data.pickupReuseWatchRegion : true;
             deathCount = typeof data.deathCount === "number" ? data.deathCount : 0;
             mainWinPos = data.mainWinPos || mainWinPos;
             miniWinPos = data.miniWinPos || miniWinPos;
@@ -2530,10 +2520,8 @@ function loadConfig() {
         deathClickPoint = null;
         deathClickWaitMs = 1000;
         pickupText = "拾取";
-        pickupRegion = null;
         pickupClickEnabled = false;
         pickupClickPoint = null;
-        pickupReuseWatchRegion = true;
         deathCount = 0;
         mainWinPos = { x: 80, y: 220 };
         miniWinPos = { x: 80, y: 220 };
