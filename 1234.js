@@ -774,12 +774,18 @@ function manualTestOcrClick() {
                 return;
             }
             var ret = checkWatchText(pickupText, activeRegion);
+            var recognizedText = (ret && ret.debugText) || "(空)";
+            var msg = ret && ret.found
+                ? ("拾取识别成功：命中【" + pickupText + "】\n识别到的文字：\n" + recognizedText)
+                : ("拾取识别失败：未命中【" + pickupText + "】\n识别到的文字：\n" + recognizedText);
+
             if (ret && ret.found) {
                 doTap(pickupClickPoint.x, pickupClickPoint.y);
-                toast("拾取识别成功");
-            } else {
-                toast("未识别到拾取文字，未执行点击");
             }
+
+            log("manualTestOcrClick => " + msg);
+            toast(ret && ret.found ? "拾取识别成功" : "拾取识别失败");
+            dialogs.alert("测试拾取识别", msg).then(function() {});
         } catch (e) {
             log("manualTestOcrClick error: " + e);
             toast("测试拾取识别异常: " + e);
