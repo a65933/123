@@ -221,6 +221,12 @@ function bindMiniWindowEvents() {
 try {
     win = createMainWindow();
     miniWin = createMiniWindow();
+
+    try { win.setPosition(-3000, -3000); } catch (e0) {}
+    try { miniWin.setPosition(-3000, -3000); } catch (e00) {}
+    try { win.setSize(0, 0); } catch (e000) {}
+    try { miniWin.setSize(0, 0); } catch (e0000) {}
+
     bindMainWindowEvents();
     bindMiniWindowEvents();
 } catch (e) {
@@ -229,18 +235,16 @@ try {
     exit();
 }
 
-win.setPosition(mainWinPos.x, mainWinPos.y);
-miniWin.setPosition(miniWinPos.x, miniWinPos.y);
 if (minimized) {
     try { win.setSize(0, 0); } catch (e1) {}
     try { win.setPosition(-3000, -3000); } catch (e2) {}
-    try { miniWin.setSize(-2, -2); } catch (e3) {}
-    try { miniWin.setPosition(miniWinPos.x, miniWinPos.y); } catch (e4) {}
+    try { miniWin.setPosition(miniWinPos.x, miniWinPos.y); } catch (e3) {}
+    try { miniWin.setSize(-2, -2); } catch (e4) {}
 } else {
-    try { win.setSize(-2, -2); } catch (e5) {}
-    try { win.setPosition(mainWinPos.x, mainWinPos.y); } catch (e6) {}
-    try { miniWin.setSize(0, 0); } catch (e7) {}
-    try { miniWin.setPosition(-3000, -3000); } catch (e8) {}
+    try { miniWin.setSize(0, 0); } catch (e5) {}
+    try { miniWin.setPosition(-3000, -3000); } catch (e6) {}
+    try { win.setPosition(mainWinPos.x, mainWinPos.y); } catch (e7) {}
+    try { win.setSize(-2, -2); } catch (e8) {}
 }
 updateInfo(true);
 
@@ -415,8 +419,6 @@ function updateInfo(force) {
         lines.push("死亡次数: " + deathCount);
         lines.push("步骤场景: " + scene.name + " (" + scene.steps.length + "步)");
         lines.push("当前角色: " + role.name + " (" + role.skills.length + "技能)");
-        lines.push("死亡点击: 默认开启(" + pointText(deathClickPoint) + ") 等待" + deathClickWaitMs + "ms");
-        lines.push("拾取点击: " + (pickupClickEnabled ? ("开启(" + pointText(pickupClickPoint) + ")") : "关闭"));
         lines.push("OCR状态: " + (monitoring ? (sceneExecuting ? "执行场景中" : "监控中") : "未启动"));
         lines.push("技能状态: " + (skillLoopRunning ? "循环中" : "未启动"));
 
@@ -480,6 +482,8 @@ function toggleMinimize() {
             if (miniWin) {
                 miniWinPos.x = parseInt(miniWin.getX());
                 miniWinPos.y = parseInt(miniWin.getY());
+                mainWinPos.x = miniWinPos.x;
+                mainWinPos.y = miniWinPos.y;
                 try { miniWin.setSize(0, 0); } catch (e4) {}
                 try { miniWin.setPosition(-3000, -3000); } catch (e5) {}
             }
