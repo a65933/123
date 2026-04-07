@@ -391,6 +391,18 @@ function pointText(point) {
     return point.x + "," + point.y;
 }
 
+function runOnUiThread(task) {
+    try {
+        ui.run(task);
+    } catch (e) {
+        try {
+            task();
+        } catch (e2) {
+            log("runOnUiThread error: " + e2);
+        }
+    }
+}
+
 function updateInfo(force) {
     try {
         if (!win) return;
@@ -433,9 +445,16 @@ function updateInfo(force) {
 
         lastInfoText = nextInfoText;
         lastInfoUpdateTime = now;
-        win.info.setText(nextInfoText);
-        win.ocrToggle.setText(monitoring ? "停止监控" : "开启监控");
-        win.skillToggle.setText(skillLoopRunning ? "停止技能" : "技能循环");
+        runOnUiThread(function() {
+            try {
+                if (!win) return;
+                win.info.setText(nextInfoText);
+                win.ocrToggle.setText(monitoring ? "停止监控" : "开启监控");
+                win.skillToggle.setText(skillLoopRunning ? "停止技能" : "技能循环");
+            } catch (e) {
+                log("updateInfo ui error: " + e);
+            }
+        });
     } catch (e) {
         log("updateInfo error: " + e);
     }
@@ -716,7 +735,8 @@ function configurePickupDetectionDialog() {
             "设置拾取识别文字",
             pickupReuseWatchRegion ? "当前：复用死亡区域" : "当前：单独拾取区域",
             "设置拾取点击位置",
-            "测试拾取识别点击"
+            "测试拾取识别点击",
+            "同图对比死亡/拾取识别"
         ]
     ).then(function(op) {
         if (op == 0) {
@@ -748,6 +768,111 @@ function configurePickupDetectionDialog() {
             });
         } else if (op == 3) {
             manualTestOcrClick();
+        } else if (op == 4) {
+            manualCompareOcrSameFrame();
+        }
+    });
+}
+
+function manualCompareOcrSameFrame() {
+    var deathRegion = watchRegion;
+    var pickupActiveRegion = pickupReuseWatchRegion ? watchRegion : pickupRegion;
+
+    if (!watchText || !String(watchText).trim()) {
+        toast("请先设置死亡识别文字");
+        return;
+    }
+    if (!deathRegion) {
+        toast("请先设置死亡识别区域");
+        return;
+    }
+    if (!pickupText || !String(pickupText).trim()) {
+        toast("请先设置拾取识别文字");
+        return;
+    }
+    if (!pickupActiveRegion) {
+        toast("请先设置拾取识别区域");
+        return;
+    }
+
+    threads.start(function () {
+        var img = null;
+        var deathClip = null;
+        var pickupClip = null;
+        try {
+            if (!ensureScreenCaptureReady()) {
+                toast("截图权限获取失败");
+                return;
+            }
+
+            img = captureScreen();
+            if (!img) {
+                toast("截图失败");
+                return;
+            }
+
+            var deathActualRegion = clampRegionToImage(deathRegion, img);
+            var pickupActualRegion = clampRegionToImage(pickupActiveRegion, img);
+
+            var deathText = "ERR: 区域无效";
+            var pickupTextResult = "ERR: 区域无效";
+            var deathFound = false;
+            var pickupFound = false;
+
+            if (deathActualRegion) {
+                deathClip = images.clip(img, deathActualRegion.x, deathActualRegion.y, deathActualRegion.w, deathActualRegion.h);
+                var deathResults = ocr.paddle.detect(deathClip, { useSlim: false, cpuThreadNum: 4 });
+                var deathArr = [];
+                if (deathResults && deathResults.length > 0) {
+                    for (var i = 0; i < deathResults.length; i++) {
+                        deathArr.push(String(deathResults[i].label || ""));
+                    }
+                }
+                deathText = deathArr.length ? deathArr.join(" | ") : "(空)";
+                deathFound = normalizeOcrText(deathText).indexOf(normalizeOcrText(watchText)) >= 0;
+            }
+
+            if (pickupActualRegion) {
+                pickupClip = images.clip(img, pickupActualRegion.x, pickupActualRegion.y, pickupActualRegion.w, pickupActualRegion.h);
+                var pickupResults = ocr.paddle.detect(pickupClip, { useSlim: false, cpuThreadNum: 4 });
+                var pickupArr = [];
+                if (pickupResults && pickupResults.length > 0) {
+                    for (var j = 0; j < pickupResults.length; j++) {
+                        pickupArr.push(String(pickupResults[j].label || ""));
+                    }
+                }
+                pickupTextResult = pickupArr.length ? pickupArr.join(" | ") : "(空)";
+                pickupFound = normalizeOcrText(pickupTextResult).indexOf(normalizeOcrText(pickupText)) >= 0;
+            }
+
+            var msg = [
+                "同图对比（同一张截图）",
+                "",
+                "死亡目标词：" + watchText,
+                "死亡原区域：" + regionText(deathRegion),
+                "死亡实际区域：" + (deathActualRegion ? regionText(deathActualRegion) : "无效"),
+                "死亡识别结果：" + (deathFound ? "命中" : "未命中"),
+                "死亡识别到的文字：",
+                deathText,
+                "",
+                "拾取目标词：" + pickupText,
+                "拾取是否复用死亡区域：" + (pickupReuseWatchRegion ? "是" : "否"),
+                "拾取原区域：" + regionText(pickupActiveRegion),
+                "拾取实际区域：" + (pickupActualRegion ? regionText(pickupActualRegion) : "无效"),
+                "拾取识别结果：" + (pickupFound ? "命中" : "未命中"),
+                "拾取识别到的文字：",
+                pickupTextResult
+            ].join("\n");
+
+            log("manualCompareOcrSameFrame => " + msg);
+            dialogs.alert("同图对比死亡/拾取识别", msg);
+        } catch (e) {
+            log("manualCompareOcrSameFrame error: " + e);
+            toast("同图对比异常: " + e);
+        } finally {
+            try { if (pickupClip) pickupClip.recycle(); } catch (e1) {}
+            try { if (deathClip) deathClip.recycle(); } catch (e2) {}
+            try { if (img) img.recycle(); } catch (e3) {}
         }
     });
 }
@@ -785,7 +910,7 @@ function manualTestOcrClick() {
 
             log("manualTestOcrClick => " + msg);
             toast(ret && ret.found ? "拾取识别成功" : "拾取识别失败");
-            dialogs.alert("测试拾取识别", msg).then(function() {});
+            dialogs.alert("测试拾取识别", msg);
         } catch (e) {
             log("manualTestOcrClick error: " + e);
             toast("测试拾取识别异常: " + e);
@@ -1539,6 +1664,34 @@ function getOcrResultCenter(r, region) {
     return null;
 }
 
+function clampRegionToImage(region, img) {
+    if (!region || !img) return null;
+    try {
+        var imgW = img.getWidth();
+        var imgH = img.getHeight();
+        var x = safeParseInt(region.x, 0);
+        var y = safeParseInt(region.y, 0);
+        var w = safeParseInt(region.w, 0);
+        var h = safeParseInt(region.h, 0);
+
+        if (x < 0) x = 0;
+        if (y < 0) y = 0;
+        if (x >= imgW || y >= imgH) return null;
+
+        if (w <= 0) w = imgW - x;
+        if (h <= 0) h = imgH - y;
+
+        if (x + w > imgW) w = imgW - x;
+        if (y + h > imgH) h = imgH - y;
+
+        if (w <= 0 || h <= 0) return null;
+        return { x: x, y: y, w: w, h: h };
+    } catch (e) {
+        log("clampRegionToImage error: " + e);
+        return null;
+    }
+}
+
 function checkWatchText(targetText, region) {
     var img = null;
     var detectImg = null;
@@ -1548,8 +1701,13 @@ function checkWatchText(targetText, region) {
         if (!img) return { found: false, debugText: "", clickPoint: null };
 
         detectImg = img;
+        var actualRegion = null;
         if (region) {
-            detectImg = images.clip(img, region.x, region.y, region.w, region.h);
+            actualRegion = clampRegionToImage(region, img);
+            if (!actualRegion) {
+                return { found: false, debugText: "ERR: 识别区域超出截图范围", clickPoint: null };
+            }
+            detectImg = images.clip(img, actualRegion.x, actualRegion.y, actualRegion.w, actualRegion.h);
         }
 
         var results = ocr.paddle.detect(detectImg, {
@@ -1570,7 +1728,7 @@ function checkWatchText(targetText, region) {
                 if (normalizeOcrText(label).indexOf(targetNorm) >= 0) {
                     found = true;
                     if (!firstHitCenter) {
-                        firstHitCenter = getOcrResultCenter(r, region);
+                        firstHitCenter = getOcrResultCenter(r, actualRegion);
                     }
                 }
             }
@@ -1620,7 +1778,7 @@ function manualTestOcr() {
 
             log("manualTestOcr => " + msg);
             toast(ret && ret.found ? "死亡识别成功" : "死亡识别失败");
-            dialogs.alert("测试死亡识别", msg).then(function() {});
+            dialogs.alert("测试死亡识别", msg);
         } catch (e) {
             log("manualTestOcr error: " + e);
             toast("测试死亡识别异常: " + e);
