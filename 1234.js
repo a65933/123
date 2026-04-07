@@ -420,14 +420,6 @@ function updateInfo(force) {
         lines.push("OCR状态: " + (monitoring ? (sceneExecuting ? "执行场景中" : "监控中") : "未启动"));
         lines.push("技能状态: " + (skillLoopRunning ? "循环中" : "未启动"));
 
-        if (monitoring && !sceneExecuting) {
-            lines.push("OCR倒计时: " + nextOcrRemainSec + "秒");
-        }
-
-        if (skillExecStepName) {
-            lines.push("技能执行: " + skillExecStepName + " 剩余" + formatExecTime(skillExecRemainMs));
-        }
-
         var nextInfoText = lines.join("\n");
         var now = new Date().getTime();
         if (!force && nextInfoText === lastInfoText && now - lastInfoUpdateTime < UPDATE_INFO_MIN_INTERVAL_MS) {
