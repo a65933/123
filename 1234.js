@@ -1938,6 +1938,7 @@ function startMonitoring() {
                 if (triggeredNow) {
                     deathCount += 1;
                     sceneExecuting = true;
+                    toast("识别到【" + watchText + "】，执行场景：" + currentScene.name);
                     if (deathClickEnabled && deathClickPoint && isValidPoint(deathClickPoint.x, deathClickPoint.y)) {
                         doTap(deathClickPoint.x, deathClickPoint.y);
                         var deathWait = normalizeDelay(deathClickWaitMs, 1000);
@@ -1947,8 +1948,6 @@ function startMonitoring() {
                         stopSkillLoop(false);
                         waitForSkillLoopStop(1500);
                     }
-
-                    toast("识别到【" + watchText + "】，执行场景：" + currentScene.name);
 
                     var list = currentScene.steps.slice();
                     for (var i = 0; i < list.length; i++) {
