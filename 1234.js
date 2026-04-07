@@ -424,10 +424,6 @@ function updateInfo(force) {
             lines.push("OCR倒计时: " + nextOcrRemainSec + "秒");
         }
 
-        if (monitorExecStepName) {
-            lines.push("场景执行: " + monitorExecStepName + " 剩余" + formatExecTime(monitorExecRemainMs));
-        }
-
         if (skillExecStepName) {
             lines.push("技能执行: " + skillExecStepName + " 剩余" + formatExecTime(skillExecRemainMs));
         }
@@ -588,15 +584,15 @@ function showTestMenu() {
     dialogs.select(
         "测试菜单",
         [
-            "测试死亡检测",
             "测试当前场景步骤",
+            "测试死亡检测",
             "测试拾取识别"
         ]
     ).then(function(op) {
         if (op == 0) {
-            manualTestOcr();
-        } else if (op == 1) {
             manualTestSteps();
+        } else if (op == 1) {
+            manualTestOcr();
         } else if (op == 2) {
             manualTestOcrClick();
         }
@@ -608,23 +604,23 @@ function showConfigMenu() {
         "配置菜单",
         [
             "OCR设置",
-            "步骤场景管理",
-            "当前场景步骤",
-            "角色管理",
             "当前角色技能",
+            "当前场景步骤",
+            "步骤场景管理",
+            "角色管理",
             "保存配置"
         ]
     ).then(function(op) {
         if (op == 0) {
             showOcrMenu();
         } else if (op == 1) {
-            showStepSceneMenu();
+            showSkillOpsMenu();
         } else if (op == 2) {
             showStepOpsMenu();
         } else if (op == 3) {
-            showRoleMenu();
+            showStepSceneMenu();
         } else if (op == 4) {
-            showSkillOpsMenu();
+            showRoleMenu();
         } else if (op == 5) {
             saveConfig();
             toast("已保存");
@@ -1406,7 +1402,7 @@ function waitForStepValidation(step, monitoringId) {
     if (!ensureScreenCaptureReady()) return false;
 
     monitorExecStepName = "[" + getActiveStepScene().name + "] 校验: " + validation.text;
-    monitorExecRemainMs = validation.timeoutMs;
+    monitorExecRemainMs = 0;
     updateInfo();
 
     var remain = validation.timeoutMs;
@@ -1419,8 +1415,6 @@ function waitForStepValidation(step, monitoringId) {
             updateInfo();
             return true;
         }
-        monitorExecRemainMs = remain;
-        updateInfo();
         var slice = remain > 250 ? 250 : remain;
         sleep(slice);
         remain -= slice;
@@ -1763,7 +1757,6 @@ function manualTestSteps() {
     }
 
     threads.start(function () {
-        var startedSkillLoopInTest = false;
         try {
             monitorExecStepName = "";
             monitorExecRemainMs = 0;
@@ -1780,8 +1773,6 @@ function manualTestSteps() {
 
                 var remain = step.delay;
                 while (remain > 0) {
-                    monitorExecRemainMs = remain;
-                    updateInfo();
                     var slice = remain > 100 ? 100 : remain;
                     sleep(slice);
                     remain -= slice;
@@ -1796,8 +1787,6 @@ function manualTestSteps() {
 
                         var skillRemain = skillWait;
                         while (skillRemain > 0) {
-                            monitorExecRemainMs = skillRemain;
-                            updateInfo();
                             var skillSlice = skillRemain > 100 ? 100 : skillRemain;
                             sleep(skillSlice);
                             skillRemain -= skillSlice;
@@ -1806,7 +1795,6 @@ function manualTestSteps() {
 
                     if (!skillLoopRunning) {
                         startSkillLoop(true);
-                        startedSkillLoopInTest = true;
                         sleep(300);
                     }
                 }
@@ -1820,9 +1808,6 @@ function manualTestSteps() {
             log("manualTestSteps error: " + e);
             toast("测试步骤异常: " + e);
         } finally {
-            if (startedSkillLoopInTest && skillLoopRunning) {
-                stopSkillLoop(false);
-            }
             monitorExecStepName = "";
             monitorExecRemainMs = 0;
             updateInfo();
@@ -1955,8 +1940,6 @@ function startMonitoring() {
 
                         var remain = step.delay;
                         while (remain > 0 && monitoring && myMonitoringWorkerId === monitoringWorkerId) {
-                            monitorExecRemainMs = remain;
-                            updateInfo();
                             var slice = remain > 100 ? 100 : remain;
                             sleep(slice);
                             remain -= slice;
@@ -1981,8 +1964,6 @@ function startMonitoring() {
 
                                     var skillRemain = skillWait;
                                     while (skillRemain > 0 && monitoring && myMonitoringWorkerId === monitoringWorkerId) {
-                                        monitorExecRemainMs = skillRemain;
-                                        updateInfo();
                                         var skillSlice = skillRemain > 100 ? 100 : skillRemain;
                                         sleep(skillSlice);
                                         skillRemain -= skillSlice;
