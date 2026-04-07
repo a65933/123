@@ -674,48 +674,12 @@ function configureDeathDetectionDialog() {
     });
 }
 
-function hideFloatyForOcrSetup() {
-    try { if (win) win.setPosition(-3000, -3000); } catch (e1) {}
-    try { if (win) win.setSize(0, 0); } catch (e2) {}
-    try { if (miniWin) miniWin.setPosition(-3000, -3000); } catch (e3) {}
-    try { if (miniWin) miniWin.setSize(0, 0); } catch (e4) {}
-}
-
-function restoreFloatyAfterOcrSetup() {
-    try {
-        if (minimized) {
-            if (miniWin) {
-                miniWin.setPosition(miniWinPos.x, miniWinPos.y);
-                miniWin.setSize(-2, -2);
-            }
-            if (win) {
-                win.setPosition(-3000, -3000);
-                win.setSize(0, 0);
-            }
-        } else {
-            if (win) {
-                win.setPosition(mainWinPos.x, mainWinPos.y);
-                win.setSize(-2, -2);
-            }
-            if (miniWin) {
-                miniWin.setPosition(-3000, -3000);
-                miniWin.setSize(0, 0);
-            }
-        }
-        updateInfo(true);
-    } catch (e) {
-        log("restoreFloatyAfterOcrSetup error: " + e);
-    }
-}
-
 function setOcrRegionOnlyDialog(onDone) {
     if (dialogBusy) {
         toast("当前已有操作未完成");
         return;
     }
     dialogBusy = true;
-    hideFloatyForOcrSetup();
-    sleep(300);
     toast("先点击OCR区域左上角");
     pickOnePoint(function(x1, y1) {
         toast("再点击OCR区域右下角");
@@ -727,7 +691,6 @@ function setOcrRegionOnlyDialog(onDone) {
             var height = Math.abs(y2 - y1);
 
             if (width < 5 || height < 5) {
-                restoreFloatyAfterOcrSetup();
                 toast("OCR区域太小，设置失败");
                 return;
             }
@@ -740,7 +703,7 @@ function setOcrRegionOnlyDialog(onDone) {
             };
 
             autoSave();
-            restoreFloatyAfterOcrSetup();
+            updateInfo(true);
             toast("已设置OCR区域");
             if (onDone) onDone();
         }, "请点击OCR区域右下角");
