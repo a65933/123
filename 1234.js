@@ -852,6 +852,9 @@ function manualCompareOcrSameFrame() {
             var msg = [
                 "同图对比（同一张截图）",
                 "",
+                "设备尺寸：" + getDeviceSizeText(),
+                "截图尺寸：" + getImageSizeText(img),
+                "",
                 "死亡目标词：" + watchText,
                 "死亡原区域：" + regionText(deathRegion),
                 "死亡实际区域：" + (deathActualRegion ? regionText(deathActualRegion) : "无效"),
@@ -905,8 +908,8 @@ function manualTestOcrClick() {
             var ret = checkWatchText(pickupText, activeRegion);
             var recognizedText = (ret && ret.debugText) || "(空)";
             var msg = ret && ret.found
-                ? ("拾取识别成功：命中【" + pickupText + "】\n识别到的文字：\n" + recognizedText)
-                : ("拾取识别失败：未命中【" + pickupText + "】\n识别到的文字：\n" + recognizedText);
+                ? ("拾取识别成功：命中【" + pickupText + "】\n设备尺寸：" + getDeviceSizeText() + "\n截图尺寸：" + ((ret && ret.imageSizeText) || "未知") + "\n原区域：" + regionText(activeRegion) + "\n实际区域：" + ((ret && ret.actualRegion) ? regionText(ret.actualRegion) : "无效") + "\n识别到的文字：\n" + recognizedText)
+                : ("拾取识别失败：未命中【" + pickupText + "】\n设备尺寸：" + getDeviceSizeText() + "\n截图尺寸：" + ((ret && ret.imageSizeText) || "未知") + "\n原区域：" + regionText(activeRegion) + "\n实际区域：" + ((ret && ret.actualRegion) ? regionText(ret.actualRegion) : "无效") + "\n识别到的文字：\n" + recognizedText);
 
             if (ret && ret.found) {
                 doTap(pickupClickPoint.x, pickupClickPoint.y);
@@ -1696,20 +1699,38 @@ function clampRegionToImage(region, img) {
     }
 }
 
+function getImageSizeText(img) {
+    try {
+        if (!img) return "未知";
+        return img.getWidth() + "x" + img.getHeight();
+    } catch (e) {
+        return "未知";
+    }
+}
+
+function getDeviceSizeText() {
+    try {
+        return device.width + "x" + device.height;
+    } catch (e) {
+        return "未知";
+    }
+}
+
 function checkWatchText(targetText, region) {
     var img = null;
     var detectImg = null;
 
     try {
         img = captureScreen();
-        if (!img) return { found: false, debugText: "", clickPoint: null };
+        if (!img) return { found: false, debugText: "", clickPoint: null, actualRegion: null, imageSizeText: "未知" };
 
         detectImg = img;
         var actualRegion = null;
+        var imageSizeText = getImageSizeText(img);
         if (region) {
             actualRegion = clampRegionToImage(region, img);
             if (!actualRegion) {
-                return { found: false, debugText: "ERR: 识别区域超出截图范围", clickPoint: null };
+                return { found: false, debugText: "ERR: 识别区域超出截图范围", clickPoint: null, actualRegion: null, imageSizeText: imageSizeText };
             }
             detectImg = images.clip(img, actualRegion.x, actualRegion.y, actualRegion.w, actualRegion.h);
         }
@@ -1743,10 +1764,10 @@ function checkWatchText(targetText, region) {
             found = true;
         }
 
-        return { found: found, debugText: arr.join(" | "), clickPoint: firstHitCenter };
+        return { found: found, debugText: arr.join(" | "), clickPoint: firstHitCenter, actualRegion: actualRegion, imageSizeText: imageSizeText };
     } catch (e) {
         log("checkWatchText error: " + e);
-        return { found: false, debugText: "ERR: " + e, clickPoint: null };
+        return { found: false, debugText: "ERR: " + e, clickPoint: null, actualRegion: null, imageSizeText: "未知" };
     } finally {
         try {
             if (detectImg && detectImg !== img) detectImg.recycle();
@@ -1777,8 +1798,8 @@ function manualTestOcr() {
             var ret = checkWatchText(watchText, watchRegion);
             var recognizedText = (ret && ret.debugText) || "(空)";
             var msg = ret && ret.found
-                ? ("OCR识别成功：命中【" + watchText + "】\n识别到的文字：\n" + recognizedText)
-                : ("OCR识别失败：未命中【" + watchText + "】\n识别到的文字：\n" + recognizedText);
+                ? ("OCR识别成功：命中【" + watchText + "】\n设备尺寸：" + getDeviceSizeText() + "\n截图尺寸：" + ((ret && ret.imageSizeText) || "未知") + "\n原区域：" + regionText(watchRegion) + "\n实际区域：" + ((ret && ret.actualRegion) ? regionText(ret.actualRegion) : "无效") + "\n识别到的文字：\n" + recognizedText)
+                : ("OCR识别失败：未命中【" + watchText + "】\n设备尺寸：" + getDeviceSizeText() + "\n截图尺寸：" + ((ret && ret.imageSizeText) || "未知") + "\n原区域：" + regionText(watchRegion) + "\n实际区域：" + ((ret && ret.actualRegion) ? regionText(ret.actualRegion) : "无效") + "\n识别到的文字：\n" + recognizedText);
 
             log("manualTestOcr => " + msg);
             toast(ret && ret.found ? "死亡识别成功" : "死亡识别失败");
