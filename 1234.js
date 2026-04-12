@@ -12,7 +12,7 @@ var watchIntervalSec = 10;
 var pressTime = 50;
 var deathClickEnabled = true;
 var deathClickPoint = null;
-var deathClickWaitMs = 1000;
+var deathClickWaitMs = 5000;
 var pickupText = "拾取";
 var pickupClickEnabled = false;
 var pickupClickPoint = null;
@@ -682,9 +682,9 @@ function configureDeathDetectionDialog() {
                 toast("已设置死亡后点击位置");
             });
         } else if (op == 2) {
-            dialogs.rawInput("死亡后等待时间(ms)", String(deathClickWaitMs || 1000)).then(function(v) {
+            dialogs.rawInput("死亡后等待时间(ms)", String(deathClickWaitMs || 5000)).then(function(v) {
                 if (v == null) return;
-                deathClickWaitMs = normalizeDelay(v, 1000);
+                deathClickWaitMs = normalizeDelay(v, 5000);
                 autoSave();
                 updateInfo(true);
                 toast("已设置死亡后等待时间");
@@ -1939,14 +1939,14 @@ function startMonitoring() {
                     deathCount += 1;
                     sceneExecuting = true;
                     toast("识别到【" + watchText + "】，执行场景：" + currentScene.name);
-                    if (deathClickEnabled && deathClickPoint && isValidPoint(deathClickPoint.x, deathClickPoint.y)) {
-                        doTap(deathClickPoint.x, deathClickPoint.y);
-                        var deathWait = normalizeDelay(deathClickWaitMs, 1000);
-                        if (deathWait > 0) sleep(deathWait);
-                    }
                     if (skillLoopRunning) {
                         stopSkillLoop(false);
                         waitForSkillLoopStop(1500);
+                    }
+                    if (deathClickEnabled && deathClickPoint && isValidPoint(deathClickPoint.x, deathClickPoint.y)) {
+                        doTap(deathClickPoint.x, deathClickPoint.y);
+                        var deathWait = normalizeDelay(deathClickWaitMs, 5000);
+                        if (deathWait > 0) sleep(deathWait);
                     }
 
                     var list = currentScene.steps.slice();
@@ -2439,7 +2439,7 @@ function loadConfig() {
             watchIntervalSec = typeof data.watchIntervalSec === "number" ? data.watchIntervalSec : 10;
             deathClickEnabled = typeof data.deathClickEnabled === "boolean" ? data.deathClickEnabled : true;
             deathClickPoint = data.deathClickPoint || null;
-            deathClickWaitMs = typeof data.deathClickWaitMs === "number" ? data.deathClickWaitMs : 1000;
+            deathClickWaitMs = typeof data.deathClickWaitMs === "number" ? data.deathClickWaitMs : 5000;
             pickupText = data.pickupText || "拾取";
             pickupClickEnabled = !!data.pickupClickEnabled;
             pickupClickPoint = data.pickupClickPoint || null;
@@ -2487,7 +2487,7 @@ function loadConfig() {
         pressTime = 50;
         deathClickEnabled = true;
         deathClickPoint = null;
-        deathClickWaitMs = 1000;
+        deathClickWaitMs = 5000;
         pickupText = "拾取";
         pickupClickEnabled = false;
         pickupClickPoint = null;
